@@ -95,6 +95,26 @@ class Saf {
     }
   }
 
+  Future<List<String>?> getUriPath({String fileType = "any"}) async {
+    try {
+      const kGetFilesPath = "buildChildDocumentsUriUsingTree";
+      const kFileType = "fileType";
+      const kSourceTreeUriString = "sourceTreeUriString";
+      var sourceTreeUriString = _uriString;
+
+      final args = <String, dynamic>{
+        kFileType: fileType,
+        kSourceTreeUriString: sourceTreeUriString,
+      };
+      final paths = await kDocumentsContractChannel
+          .invokeMethod<List<dynamic>?>(kGetFilesPath, args);
+      if (paths == null) return null;
+      return List<String>.from(paths);
+    } catch (e) {
+      return null;
+    }
+  }
+
   // Request to `cache` the Granted Directory into App's Package [files] folder
   Future<List<String>?> cache({String? fileType}) async {
     try {
