@@ -134,7 +134,14 @@ class _MyAppState extends State<MyApp> {
             ],
           ),
           onPressed: () async {
-            await saf.getDirectoryPermission(isDynamic: true);
+            // await saf.getDirectoryPermission(isDynamic: true);
+            Saf saf = Saf("~");
+            bool? isGranted = await saf.getDirectoryPermission(grantWritePermission: true, isDynamic: true);
+            final directoryPath = saf.getDirectory();
+            if (isGranted != null && isGranted) {
+              final uriPaths = await saf.getUriPath();
+              final bp = 1;
+            }
           },
         ),
       ),

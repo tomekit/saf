@@ -1,22 +1,25 @@
 package com.ivehement.saf.api
 
+import android.content.ContentResolver
 import android.graphics.Point
 import android.net.Uri
 import android.os.Build
-import android.util.Log
 import android.provider.DocumentsContract
-import android.content.ContentResolver
+import android.util.Log
+import androidx.annotation.RequiresApi
+import com.ivehement.saf.ROOT_CHANNEL
+import com.ivehement.saf.SafPlugin
+import com.ivehement.saf.api.utils.*
+import com.ivehement.saf.plugin.*
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
-import com.ivehement.saf.ROOT_CHANNEL
-import com.ivehement.saf.SafPlugin
-import com.ivehement.saf.plugin.*
-import com.ivehement.saf.api.utils.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import com.ivehement.saf.api.utils.SafUtil
+import java.io.Closeable
+import java.util.LinkedList
+
 
 internal class DocumentsContractApi(private val plugin: SafPlugin) :
   MethodChannel.MethodCallHandler,
@@ -36,42 +39,44 @@ internal class DocumentsContractApi(private val plugin: SafPlugin) :
           val sourceTreeUri = Uri.parse(call.argument<String>("sourceTreeUriString"))
           val fileType = call.argument<String>("fileType")
         if(Build.VERSION.SDK_INT >= 21) {
-            val parentUri = DocumentsContract.buildChildDocumentsUriUsingTree(sourceTreeUri, DocumentsContract.getTreeDocumentId(sourceTreeUri))
-            val contentResolver: ContentResolver = plugin.context.contentResolver
+//            val parentUri = DocumentsContract.buildChildDocumentsUriUsingTree(sourceTreeUri, DocumentsContract.getTreeDocumentId(sourceTreeUri))
+//            val contentResolver: ContentResolver = plugin.context.contentResolver
             var childrenUris = listOf<String>()
-            val cursor = contentResolver.query(
-              parentUri, arrayOf(
-                DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-                DocumentsContract.Document.COLUMN_MIME_TYPE,
-                DocumentsContract.Document.COLUMN_LAST_MODIFIED
-                ),
-                null, null, null
-                )
+//            val cursor = contentResolver.query(
+//              parentUri, arrayOf(
+//                DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+//                DocumentsContract.Document.COLUMN_MIME_TYPE,
+//                DocumentsContract.Document.COLUMN_LAST_MODIFIED
+//                ),
+//                null, null, null
+//                )
             try {
-              while (cursor!!.moveToNext()) {
-                val docId = cursor.getString(0)
-                val mime = cursor.getString(1)
-                if (FILETYPES.contains(mime) || fileType == "any") {
-                    val eachUri =
-                        DocumentsContract.buildChildDocumentsUriUsingTree(
-                            parentUri,
-                            docId
-                        ).toString().replace("/children", "")
-                        childrenUris += eachUri
-                      }
-                }
+//              while (cursor!!.moveToNext()) {
+//                val docId = cursor.getString(0)
+//                val mime = cursor.getString(1)
+//                if (FILETYPES.contains(mime) || fileType == "any") {
+//                    val eachUri =
+//                        DocumentsContract.buildChildDocumentsUriUsingTree(
+//                            parentUri,
+//                            docId
+//                        ).toString().replace("/children", "")
+//                        childrenUris += eachUri
+//                      }
+//                }
+
+              childrenUris = traverseDirectoryEntries(sourceTreeUri);
             }
             catch(e: Exception) {
               Log.e("CONTENT_RESOLVER_EXCEPTION: ", e.message!!)
             }
             finally {
-              if (cursor != null) {
-                  try {
-                      cursor.close()
-                  } catch (re: RuntimeException) {
-                      
-                  }
-              } 
+//              if (cursor != null) {
+//                  try {
+//                      cursor.close()
+//                  } catch (re: RuntimeException) {
+//
+//                  }
+//              }
             }
             result.success(childrenUris)
           }
@@ -218,6 +223,67 @@ internal class DocumentsContractApi(private val plugin: SafPlugin) :
     }
   }
 
+  @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
+  // Inspired by Java version of: https://stackoverflow.com/a/68789978/2263395
+  fun traverseDirectoryEntries(rootUri: Uri?): ArrayList<String> {
+    val listUri = ArrayList<String>()
+    val contentResolver: ContentResolver = plugin.context.contentResolver
+    var childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(
+      rootUri,
+      DocumentsContract.getTreeDocumentId(rootUri)
+    )
+
+    // Keep track of our directory hierarchy
+    val dirNodes: MutableList<Uri> = LinkedList()
+    dirNodes.add(childrenUri)
+    while (!dirNodes.isEmpty()) {
+      childrenUri = dirNodes.removeAt(0) // get the item from top
+      val c = contentResolver.query(
+        childrenUri, arrayOf(
+          DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+          DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+          DocumentsContract.Document.COLUMN_MIME_TYPE
+        ),
+        null, null, null
+      )
+      try {
+        while (c!!.moveToNext()) {
+          val docId = c.getString(0)
+          val name = c.getString(1)
+          val mime = c.getString(2)
+          if (isDirectory(mime)) {
+            val newNode = DocumentsContract.buildChildDocumentsUriUsingTree(rootUri, docId)
+            dirNodes.add(newNode)
+          } else {
+            val newNode = DocumentsContract.buildChildDocumentsUriUsingTree(rootUri, docId)
+            listUri.add(newNode.toString().removeSuffix("/children"))
+          }
+        }
+      } finally {
+        closeQuietly(c)
+      }
+    }
+    return listUri
+  }
+
+  // Util method to check if the mime type is a directory
+  @RequiresApi(Build.VERSION_CODES.KITKAT)
+  private fun isDirectory(mimeType: String): Boolean {
+    return DocumentsContract.Document.MIME_TYPE_DIR == mimeType
+  }
+
+  // Util method to close a closeable
+  private fun closeQuietly(closeable: Closeable?) {
+    if (closeable != null) {
+      try {
+        closeable.close()
+      } catch (re: java.lang.RuntimeException) {
+        throw re
+      } catch (ignore: java.lang.Exception) {
+        // ignore exception
+      }
+    }
+  }
 
   override fun startListening(binaryMessenger: BinaryMessenger) {
     if (channel != null) stopListening()

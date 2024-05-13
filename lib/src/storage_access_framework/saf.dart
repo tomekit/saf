@@ -86,8 +86,7 @@ class Saf {
         kFileType: fileType,
         kSourceTreeUriString: sourceTreeUriString,
       };
-      final paths = await kDocumentsContractChannel
-          .invokeMethod<List<dynamic>?>(kGetFilesPath, args);
+      final paths = await kDocumentsContractChannel.invokeMethod<List<dynamic>?>(kGetFilesPath, args);
       if (paths == null) return null;
       return List<String>.from(paths);
     } catch (e) {
